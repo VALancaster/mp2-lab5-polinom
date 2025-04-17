@@ -1,185 +1,241 @@
 ﻿#include "polinom.h"
+#include <iostream>
+#include <stdexcept>
+#include <algorithm>
+#include <cctype>
 
-void Polinom::simplify()
-{
-	if (monoms.IsEmpty())
-		return;
-
-	for (size_t i = 0; i < monoms.size(); ++i)
-	{
-		Monom& current = monoms[i];
-		for (size_t j = i + 1; j < monoms.size(); )
-		{
-			Monom& next = monoms[j];
-			// Проверяем, одинаковые ли степени переменных у мономов
-			if (current.getX() == next.getX() &&
-				current.getY() == next.getY() &&
-				current.getZ() == next.getZ())
-			{
-				// Складываем коэффициенты одинаковых мономов
-				current.setCoef(current.getCoef() + next.getCoef());
-				// Удаляем текущий моном, а не следующий, потому что следующий будет сдвигаться
-				monoms.EraseAfter(j - 1);
-			}
-			else {
-				++j;
-			}
-		}
-	}
-
-	// Убираем все мономы с нулевыми коэффициентами
-	for (size_t i = 0; i < monoms.size(); ++i)
-	{
-		if (monoms[i].getCoef() == 0)
-		{
-			monoms.EraseAfter(i - 1);
-			--i; // после удаления элемента надо уменьшить индекс, чтобы не пропустить следующий
-		}
-	}
-}
-
+using namespace std;
 
 Polinom::Polinom(const string& str)
 {
-	stringstream ss(str);
-	char sign = '+'; // по умолчанию знак плюс
-	double coef = 0.0;
-	int x = 0, y = 0, z = 0;
-
 	size_t pos = 0;
-	while (pos < str.size())
+	size_t length = str.size();
+	while (pos < length)
 	{
-		if (str[pos] == '+' || str[pos] == '-') // чтение знака
-		{
-			sign = str[pos];
+		while (pos < length && isspace(str[pos])) // пропуск если пробелы и табуляция
 			pos++;
-		}
-
-		// сброс значений для нового монома
-		x = y = z = 0;
-		coef = 0.0; 
-		// чтение коэффициента с учетом дробной части 
-		size_t coef_start = pos;
-		while ((isdigit(str[pos]) || str[pos] == '.') && pos < str.size()) // чтение коэффициента
-		{
-			// coef = coef * 10 + (str[pos] - '0');
+		if (pos >= length)
+			break;
+		size_t startPos = pos; // начало строки
+		if (str[pos] == '+' || str[pos] == '-') // пропуск знака
 			pos++;
-		}
-		coef = std::stod(str.substr(coef_start, pos - coef_start));
-		if (sign == '-')
-			coef = -coef;
-
-		// чтение степеней x, y, z
-		if (str[pos] == 'x')
-		{
-			++pos; // пропускаем 'x'
-			x = str[pos] - '0';
+		while (pos < length && !isspace(str[pos]) && str[pos] != '+' && str[pos] != '-') // пока не знаки, пробелы и табуляция
 			pos++;
-		}
-		if (str[pos] == 'y')
+		string monomStr = str.substr(startPos, pos - startPos); // подстрока - моном
+		if (!monomStr.empty() && monomStr.find_first_not_of(" \t") != -1) // не пусто и все символы подстроки - не пробелы и не табуляция
 		{
-			++pos; // пропускаем 'y'
-			y = str[pos] - '0';
-			pos++;
+			Monom monom(monomStr); // создание монома из строки
+			addMonom(monom);
 		}
-		if (str[pos] == 'z')
-		{
-			++pos; // пропускаем 'z'
-			z = str[pos] - '0';
-			pos++;
-		}
-
-		Monom m(coef, x, y, z);
-		monoms.PushFront(m);
-		x = y = z = 0;
 	}
-	simplify();
+	removeZeroMonoms();
+}
+
+Polinom::Polinom(const Polinom& other) {
+	for (const auto& monom : other.monoms)
+		monoms.addToEnd(monom);
+}
+
+void Polinom::removeZeroMonoms()
+{
+	size_t i = 0;
+	while (i < monoms.length())
+	{
+		if (monoms.getItem(i).coef == 0.0) // если коэффициент 0
+			monoms.eraseAt(i);
+		else
+			++i;
+	}
+}
+
+void Polinom::addMonom(const Monom& monom)
+{
+	if (monom.coef == 0.0) // если коэффициент = 0
+		return;
+	bool found = false;
+	for (auto& existingMonom : monoms)
+	{
+		if (existingMonom.x == monom.x && existingMonom.y == monom.y && existingMonom.z == monom.z)
+		{
+			existingMonom.coef += monom.coef; // если степени мономов одинаковые, то суммируем коэффициенты
+			found = true;
+			break;
+		}
+	}
+	if (!found)
+		monoms.addToEnd(monom);
+}
+
+double Polinom::evaluate(double x, double y, double z) const
+{
+	double result = 0.0;
+	for (auto& monom : monoms)
+		result += monom.evaluate(x, y, z);
+	return result;
 }
 
 string Polinom::toString() const
 {
-	ostringstream os;
-	for (size_t i = 0; i < monoms.size(); ++i)
+	string result = ""; // сначала пустая строка
+
+	for (size_t i = 0; i < monoms.length(); ++i)
 	{
-		const Monom& m = monoms[i];
-		os << (m.getCoef() >= 0 ? " + " : " - ")
-			<< abs(m.getCoef())
-			<< "x^" << m.getX()
-			<< "y^" << m.getY()
-			<< "z^" << m.getZ();
+		const Monom& monom = monoms.getItem(i); // берется моном из списка
+		string monomStr = monom.toString(); // каждый моном превращается в строку
+		if (!monomStr.empty())
+		{
+			if (result.empty()) // текущий моном - первый
+				result = monomStr;
+			else
+			{
+				// Добавляем знак только если моном положительный
+				if (monom.coef > 0) {
+					result += "+" + monomStr;
+				}
+				else {
+					result += monomStr; // Отрицательный моном уже содержит "-"
+				}
+			}
+		}
 	}
-	string result = os.str();
-	return result.empty() ? "0" : result;
+	return result.empty() ? "0" : result; // если строка осталась пустой - вернется '0', иначе полином
+}
+
+Polinom Polinom::derivative(char var) const
+{
+	Polinom result;
+	for (const auto& monom : monoms)
+	{
+		Monom deriv = monom;
+		if (var == 'x' && deriv.x > 0)
+		{
+			deriv.coef *= deriv.x;
+			deriv.x -= 1;
+			result.addMonom(deriv);
+		}
+		if (var == 'y' && deriv.y > 0)
+		{
+			deriv.coef *= deriv.y;
+			deriv.y -= 1;
+			result.addMonom(deriv);
+		}
+		if (var == 'z' && deriv.z > 0)
+		{
+			deriv.coef *= deriv.z;
+			deriv.z -= 1;
+			result.addMonom(deriv);
+		}
+	}
+	result.removeZeroMonoms();
+	return result;
 }
 
 Polinom& Polinom::operator=(const Polinom& other)
 {
 	if (this != &other)
 	{
-		monoms.Clear();  // очищаем текущий список
-		for (size_t i = 0; i < other.monoms.size(); ++i)
-		{
-			monoms.PushFront(other.monoms[i]); // копируем все мономы из другого полинома
-		}
+		monoms.reset();
+		for (const auto& monom : other.monoms)
+			monoms.addToEnd(monom);
 	}
 	return *this;
 }
 
 Polinom Polinom::operator+(const Polinom& other) const
 {
-	Polinom result;
-	for (size_t i = 0; i < monoms.size(); ++i)
-		result.monoms.PushFront(monoms[i]);
-	for (size_t i = 0; i < other.monoms.size(); ++i)
-		result.monoms.PushFront(other.monoms[i]);
-	result.simplify();
+	Polinom result(*this);
+	result += other;
 	return result;
+}
+
+Polinom& Polinom::operator+=(const Polinom& other)
+{
+	for (const auto& monom : other.monoms)
+		addMonom(monom);
+	removeZeroMonoms();
+	return *this;
 }
 
 Polinom Polinom::operator-(const Polinom& other) const
 {
-	Polinom result = *this; // в новом полиноме находится текущий полином
-	for (size_t i = 0; i < other.monoms.size(); ++i) // постепенно вычитаем второй полином
-	{
-		Monom current = other.monoms[i];
-		current.setCoef(-current.getCoef()); // инвертируем знак 
-		result.monoms.PushFront(current); 
-	}
-	result.simplify();
+	Polinom result(*this);
+	result -= other;
 	return result;
 }
 
-Polinom Polinom::operator*(double scalar) const
+Polinom& Polinom::operator-=(const Polinom& other)
 {
-	Polinom result;
-	for (size_t i = 0; i < monoms.size(); ++i)
+	for (const auto& monom : other.monoms)
 	{
-		Monom current = monoms[i];
-		current.setCoef(current.getCoef() * scalar);
-		result.monoms.PushFront(current);
+		Monom invertedMonom = monom;
+		invertedMonom.coef = -invertedMonom.coef;
+		addMonom(invertedMonom);
 	}
-	result.simplify(); 
+	removeZeroMonoms();
+	return *this;
+}
+
+Polinom Polinom::operator*(double constant) const
+{
+	Polinom result(*this);
+	result *= constant;
 	return result;
 }
 
-Polinom Polinom::derivativeX() const
+Polinom& Polinom::operator*=(double constant)
+{
+	if (constant == 0.0)
+		monoms.reset(); // cписок очищается
+	else
+	{
+		for (auto& monom : monoms)
+			monom.coef *= constant; // домножение каждого коэффициента
+	}
+	return *this;
+}
+
+Polinom Polinom::operator*(const Polinom& other) const
 {
 	Polinom result;
-	for (size_t i = 0; i < monoms.size(); ++i)
+	for (const auto& monom1 : monoms) // берется моном исходного полинома
 	{
-		Monom current = monoms[i];
-		if (current.getX() > 0) // поскольку x,y,z принадлежат отрезку [0,...,9]
+		for (const auto& monom2 : other.monoms) // берется моном полинома, на который умножаем
 		{
-			current.setCoef(current.getCoef() * current.getX());
-			current.setX(current.getX() - 1);
-			result.monoms.PushFront(current);
-		} 
-		else if (current.getX() == 0 && current.getCoef() != 0)
-		{
-			Monom zeromonom(0.0, 0, current.getY(), current.getZ());
-			result.monoms.PushFront(zeromonom);
+			Monom product = monom1 * monom2;
+			result.addMonom(product); // добавляет моном с упрощением
 		}
 	}
-	result.simplify();
+	result.removeZeroMonoms();
 	return result;
 }
+
+Polinom& Polinom::operator*=(const Polinom& other)
+{
+	Polinom result = (*this) * other;
+	*this = result; // результат копируется из временного монома в текущий
+	return *this;
+}
+
+bool Polinom::operator==(const Polinom& other) const
+{
+	if (monoms.length() != other.monoms.length())
+		return false;
+	for (size_t i = 0; i < monoms.length(); ++i)
+	{
+		if (monoms.getItem(i) != other.monoms.getItem(i))
+			return false;
+	}
+	return true;
+}
+
+bool Polinom::operator!=(const Polinom& other) const
+{
+	return !(*this == other);
+}
+
+ostream& operator<<(ostream& out, const Polinom& polinom)
+{
+	out << polinom.toString();
+	return out;
+}
+

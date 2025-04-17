@@ -1,198 +1,200 @@
-﻿#ifndef TSINGLYLIST_H
-#define TSINGLYLIST_H
+﻿#ifndef SINGLY_LIST_H
+#define SINGLY_LIST_H
 
-#include <vector>
+#include <stdexcept>
+#include <utility>
 
 using namespace std;
 
-template<typename T>
-class TSinglyList {
+template<typename Type>
+class SinglyList
+{
 private:
-	struct TNode
+	struct Element
 	{
-		T value; // значение 
-		TNode* pNext; // указатель на следующее звено
+		Type data;
+		Element* next = nullptr;
 	};
-	TNode* pFirst; // указатель на первое звено
-	size_t sz; // размер списка
+
+	Element* firstElement; // первый элемент (некоторые методы будут за O(1) вместо O(N))
+	Element* lastElement; // последний элемент (некоторые методы будут за O(1) вместо O(N))
+	size_t elementCount; // количество элементов
+
+	Element* fetchElement(size_t index) const // получения указателя на элемент по индексу
+	{
+		if (index >= elementCount)
+			throw out_of_range("Index out of range");
+		Element* temp = firstElement;
+		for (size_t i = 0; i < index; ++i)
+			temp = temp->next;
+		return temp;
+	}
+
 public:
-	TSinglyList(); // конструктор по умолчанию
-	TSinglyList(const vector<T>& v); // конструктор преобразования типа (из вектора)
-	TSinglyList(const TSinglyList& list); // конструктор копирования
-	
-	TSinglyList& operator=(const TSinglyList& list);
+	SinglyList() noexcept : elementCount(0), firstElement(nullptr), lastElement(nullptr) {};
+	SinglyList(const SinglyList& source) : elementCount(0), firstElement(nullptr), lastElement(nullptr)
+	{
+		for (Element* node = source.firstElement; node; node = node->next) // пока node не nullptr
+			addToEnd(node->data); // добавляет данные data из узла node
+	}
+	SinglyList(SinglyList&& source) noexcept : firstElement(source.firstElement), lastElement(source.lastElement), elementCount(source.elementCount)
+	{
+		source.firstElement = source.lastElement = nullptr; // при удалении исходного списка с новым ничего не произойдет
+		source.elementCount = 0;
+	}
+	~SinglyList()
+	{
+		reset();
+	}
 
-	~TSinglyList(); // деструктор
+	size_t length() const noexcept
+	{
+		return elementCount;
+	}
+	bool empty() const noexcept
+	{
+		return elementCount == 0;
+	}
 
-    void swap(TSinglyList& l, TSinglyList& r) noexcept;
-	size_t size() const noexcept;
-	bool IsEmpty() const noexcept;
-	T& Front() noexcept;
-	void PushFront(const T& val);
-	void PopFront() noexcept;
-	TNode* ToPos(size_t pos);
-    TNode* const ToPos(size_t pos) const;
-	T& operator[](size_t pos);
-	const T& operator[](size_t pos) const;
-	void PushAfter(size_t pos, const T& val);
-	void EraseAfter(size_t pos);
-    void Clear();
+	void addToEnd(const Type& data) // вставка в конец
+	{
+		Element* newNode = new Element{ data }; // cоздается новый узел NewNode c данными data
+		if (lastElement)
+			lastElement->next = newNode;
+		else
+			firstElement = newNode; // если список пуст
+		lastElement = newNode; // обновили последний элемент
+		++elementCount;
+	}
+	void addToStart(const Type& data) // вставка в начало
+	{
+		Element* newNode = new Element{ data, firstElement }; // создается новый узел NewNode с данными data, который указывает на первый элемент
+		firstElement = newNode; // обновили первый элемент
+		if (!lastElement)
+			lastElement = newNode; // если список пуст
+		++elementCount;
+	}
+	void eraseAt(size_t index) // удаление элемента по индексу
+	{
+		if (index >= elementCount)
+			throw out_of_range("Index out of range");
+		Element* toRemove = nullptr; // создается указатель на удаляемый элемент
+		if (index == 0)
+		{
+			toRemove = firstElement;
+			firstElement = firstElement->next; // обновили первый элемент для исключения нужного
+			if (!firstElement) lastElement = nullptr;
+		}
+		else
+		{
+			Element* prev = fetchElement(index - 1); // предыдущий элемент до удаляемого	
+			toRemove = prev->next; // берется указатель от предыдущего элемента на следующий (нужный)
+			prev->next = toRemove->next; // исключаем из цепочки списка удаляемый элемент
+			if (index == elementCount - 1)
+				lastElement = prev; // обновили последний элемент
+		}
+		delete toRemove; // освобождается память
+		--elementCount;
+	}
+	void reset() // удаление всех элементов из списка
+	{
+		while (firstElement)
+		{
+			Element* temp = firstElement;
+			firstElement = firstElement->next; // переставляем указатель вперед
+			delete temp;
+		}
+		lastElement = nullptr;
+		elementCount = 0;
+	}
+
+	Type& getItem(size_t index) // получение данных по индексу
+	{
+		return fetchElement(index)->data;
+	}
+	const Type& getItem(size_t index) const // получение данных по индексу
+	{
+		return fetchElement(index)->data;
+	}
+
+	bool operator==(const SinglyList& source) const noexcept
+	{
+		if (elementCount != source.elementCount)
+			return false;
+		Element* current1 = firstElement;
+		Element* current2 = source.firstElement;
+		while (current1) // эквивалентно while (current 2)
+		{
+			if (current1->data != current2->data)
+				return false;
+			current1 = current1->next;
+			current2 = current2->next;
+		}
+		return true;
+	}
+	bool operator!=(const SinglyList& source) const noexcept
+	{
+		return !(*this == source);
+	}
+
+	SinglyList& operator=(const SinglyList& source)
+	{
+		if (this == &source) // cравнение указателей
+			return *this; // вернули текущий список
+		reset();
+		for (Element* node = source.firstElement; node; node = node->next)
+			addToEnd(node->data);
+		return *this;
+	}
+	SinglyList& operator=(SinglyList&& source) noexcept
+	{
+		if (this == &source) // cравнение указателей
+			return *this; // вернули текущий список
+		reset();
+		firstElement = source.firstElement;
+		lastElement = source.lastElement;
+		elementCount = source.elementCount;
+		source.firstElement = source.lastElement = nullptr;
+		source.elementCount = 0;
+		return *this;
+	}
+
+	// класс Итератор будет применяться как абстракция для обхода элементов списка	
+	class Iter
+	{
+	private:
+		Element* currentElem; // указатель на текущий элемент списка
+	public:
+		explicit Iter(Element* element) : currentElem(element) {} // конструктор
+		Iter& operator++() // префиксный инкремент
+		{
+			currentElem = currentElem->next; // перемещаем итератор
+			return *this; // возвращаем итератор
+		}
+		bool operator==(const Iter& other) const // сравнение 2 итераторов
+		{
+			return currentElem == other.currentElem; // сравнение указателей на элемент
+		}
+		bool operator!=(const Iter& other) const // сравнение 2 итераторов
+		{
+			return currentElem != other.currentElem; // сравнение указателей на элемент
+		}
+		Type& operator*() // разыменование итератора (получение данных текущего элемента)
+		{
+			return currentElem->data;
+		}
+	};
+
+	Iter begin() const // возвращает итератор: указывающий на первый элемент контейнера (списка)
+	{
+		return Iter(firstElement);
+	}
+	Iter end() const // возвращает итератор: указывающий на последний элемент контейнера (списка)
+	{
+		return Iter(nullptr);
+	}
 };
 
-// Реализации методов
-
-template<typename T>
-TSinglyList<T>::TSinglyList() : pFirst(nullptr), sz(0) {}
-
-template<typename T>
-TSinglyList<T>::TSinglyList(const vector<T>& v) : pFirst(nullptr), sz(0)
-{
-    for (size_t i = v.size(); i > 0; i--)
-        PushFront(v[i - 1]);
-}
-
-template<typename T>
-TSinglyList<T>::TSinglyList(const TSinglyList& list) : pFirst(nullptr), sz(list.sz)
-{
-    if (list.pFirst == nullptr)
-        return;
-    typename TSinglyList<T>::TNode* pNew = pFirst = new TNode{ *list.pFirst }; // звено для копирования первого элемента списка
-    // { *list.pFirst} - инициализирует значение звена копией данных из первого звена списка list
-    for (; pNew->pNext != nullptr; pNew = pNew->pNext)
-        pNew->pNext = new TNode{ *pNew->pNext };
-}
-
-template<typename T>
-TSinglyList<T>& TSinglyList<T>::operator=(const TSinglyList& list)
-{
-    if (this != &list)
-    {
-        TSinglyList tmp(list);
-        swap(*this, tmp);
-    }
-    return *this;
-}
-
-template<typename T>
-TSinglyList<T>::~TSinglyList()
-{
-    typename TSinglyList<T>::TNode* p;
-    while (pFirst != nullptr)
-    {
-        p = pFirst;
-        pFirst = pFirst->pNext;
-        delete p;
-    }
-}
-
-template<typename T>
-void TSinglyList<T>::swap(TSinglyList& l, TSinglyList& r) noexcept
-{
-    using std::swap;
-    swap(l.pFirst, r.pFirst);
-    swap(l.sz, r.sz);
-}
-
-template<typename T>
-size_t TSinglyList<T>::size() const noexcept
-{
-    return sz;
-}
-
-template<typename T>
-bool TSinglyList<T>::IsEmpty() const noexcept
-{
-    return sz == 0;
-}
-
-template<typename T>
-T& TSinglyList<T>::Front() noexcept
-{
-    return pFirst->value;
-}
-
-template<typename T>
-void TSinglyList<T>::PushFront(const T& val)
-{
-    typename TSinglyList<T>::TNode* node = new TNode{ val, pFirst };
-    pFirst = node;
-    sz++;
-}
-
-template<typename T>
-void TSinglyList<T>::PopFront() noexcept
-{
-    typename TSinglyList<T>::TNode* p = pFirst;
-    pFirst = pFirst->pNext;
-    delete p;
-    sz--;
-}
-
-template<typename T>
-typename TSinglyList<T>::TNode* TSinglyList<T>::ToPos(size_t pos)
-{
-    typename TSinglyList<T>::TNode* p = pFirst;
-    for (size_t i = 0; i < pos; i++)
-    {
-        if (p == nullptr)
-            throw std::out_of_range("Invalid position");
-        p = p->pNext;
-    }
-    return p;
-}
-
-template<typename T>
-typename TSinglyList<T>::TNode* const TSinglyList<T>::ToPos(size_t pos) const
-{
-    typename TSinglyList<T>::TNode* p = pFirst;
-    for (size_t i = 0; i < pos; i++)
-    {
-        if (p == nullptr)
-            throw std::out_of_range("Invalid position");
-        p = p->pNext;
-    }
-    return p;
-}
-
-template<typename T>
-T& TSinglyList<T>::operator[](size_t pos)
-{
-    typename TSinglyList<T>::TNode* p = ToPos(pos);
-    return p->value;
-}
-
-template<typename T>
-const T& TSinglyList<T>::operator[](size_t pos) const
-{
-    return ToPos(pos)->value;
-}
-
-template<typename T>
-void TSinglyList<T>::PushAfter(size_t pos, const T& val)
-{
-    typename TSinglyList<T>::TNode* p = ToPos(pos);
-    typename TSinglyList<T>::TNode* pNew = new TNode{ val, p->pNext };
-    p->pNext = pNew;
-    sz++;
-}
-
-template<typename T>
-void TSinglyList<T>::EraseAfter(size_t pos)
-{
-    typename TSinglyList<T>::TNode* p = ToPos(pos);
-    typename TSinglyList<T>::TNode* pDel = p->pNext;
-    p->pNext = pDel->pNext;
-    delete pDel;
-    sz--;
-}
-
-template <typename T>
-void TSinglyList<T>::Clear()
-{
-    while (!IsEmpty())
-    {
-        PopFront();
-    }
-}
 
 #endif
+
